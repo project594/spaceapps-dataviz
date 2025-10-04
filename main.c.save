@@ -1,0 +1,219 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <raylib.h>
+#include <math.h>
+
+double toDegrees = 180.0 / M_PI;
+
+typedef struct Point {
+	float x;
+	float y;
+} Point;
+
+typedef struct Sprite {
+	Texture2D texture;
+	Rectangle dest_rect;
+} Sprite;
+
+typedef struct PID_Controller {
+    double Gain;
+    double Kp;
+    double Ki;
+    double Kd;
+    double setpoint;
+    double integral_sum;
+    double prev_error;
+    double output_min;
+    double output_max;
+} PID_Controller;
+
+typedef struct phys_Shaft {
+	double x;
+	double y;
+	double angle;
+	double radius;
+	double inertia;
+	double omega;
+	double accel;
+	double torque;
+	double Mu;
+} phys_Shaft;
+
+
+void Initialize(){
+	SetTargetFPS(2500);
+}
+
+float PID_Update(PID_Controller* pid, float process_variable, double dt) {
+    float error = pid->setpoint - process_variable;
+
+    // Proportional term
+    float p_term = pid->Kp * error;
+
+    // Integral term
+    pid->integral_sum += error * dt;
+    float i_term = pid->Ki * pid->integral_sum;
+
+    // Derivative term
+    float derivative = (error - pid->prev_error) / dt;
+    float d_term = pid->Kd * derivative;
+
+    // Total output
+    float output = (p_term + i_term + d_term) * pid->Gain;
+
+    // Apply output limits
+    if (output > pid->output_max) {
+        output = pid->output_max;
+    } else if (output < pid->output_min) {
+        output = pid->output_min;
+    }
+
+    pid->prev_error = error;
+    return output;
+}
+
+void drawShaft(phys_Shaft* shaft){
+	const Vector2 center = { shaft->x, shaft->y };
+	DrawCircle(shaft->x, shaft->y, shaft->radius, RAYWHITE);
+	DrawCircleSector(
+			center, 
+			shaft->radius, 
+			shaft->angle * toDegrees + 10, 
+			shaft->angle * toDegrees - 10, 
+			3, 
+			GRAY
+		);
+}
+
+void drawPoint(Point* point){
+	DrawCircle(point->x, point->y, 5, BLACK);
+}
+
+void updShaftTorque(phys_Shaft* shaft,double dt){
+	shaft->accel = shaft->torque / shaft->inertia;
+	shaft->omega += shaft->accel * dt;
+	shaft->angle += shaft->omega * dt;
+	if (isnan(shaft->omega)){
+		shaft->omega = 0;
+	}
+	if (isnan(shaft->angle)){
+		shaft->angle = 0;
+	}
+}
+
+
+void updShaftSpeed(phys_Shaft* shaft, const float dt) {
+	
+
+}
+
+double calcEffectiveRodLength(double length, double radius, double theta){
+	double rcos = radius * cos(theta);
+	return sqrt((length * length) - (rcos * rcos));
+}
+
+void controlShaft(phys_Shaft* shaft){
+	if (IsKeyDown(KEY_D)){
+		shaft->torque = 0.1;
+	}
+	else if (IsKeyDown(KEY_A)){
+		shaft->torque = -0.1;
+	}
+	else {
+		shaft->torque = 0.0;
+	}
+}
+
+
+
+int main(){
+	const int width = 600;
+	const int height = 400;
+	float preverror = 0.0;	
+	
+	
+	phys_Shaft crankshaft = (phys_Shaft){
+		.x = 300,
+		.y = 300,
+		.angle = 0.0,
+		.radius = 80,
+		.inertia = 0.2,
+		.omega = 0,
+		.accel = 0,
+		.Mu = 0.01,
+		.torque = 0,
+	};
+	phys_Shaft *crankshaftPtr = &crankshaft;
+	
+	Point point_a = (Point){
+		.x = 0,
+		.y = 0,
+	};
+	Point *point_aPtr = &point_a;
+
+	Point point_b = (Point){
+		.x = 0,
+		.y = 0,
+	};
+	Point *point_bPtr = &point_b;
+	
+	PID_Controller pid = (PID_Controller){
+		.Gain = 10.0,
+		.Kp = 0.1,
+   		.Ki = 0.0,
+   		.Kd = 0.08,
+   		.setpoint = 80.0,
+   		.integral_sum = 0.0,
+   		.prev_error = 0.0,
+   		.output_min = -30.0,
+    		.output_max = 30.0,
+	};
+	PID_Controller *pidPtr = &pid;
+
+	InitWindow(width, height, "great");	
+	Initialize();
+
+	while(!WindowShouldClose()) {
+		double dt = GetFrameTime();
+		double pidOutput = PID_Update(pidPtr, crankshaftPtr->angle, dt);
+		
+		if (isnan(pidOutput)){
+			pidOutput = 0;
+		}
+
+		crankshaftPtr->torque = pidOutput;
+		updShaftTorque(crankshaftPtr, dt);
+		
+		point_aPtr->x = crankshaftPtr->radius * cos(crankshaftPtr->angle) + crankshaftPtr->x;
+		point_aPtr->y = crankshaftPtr->radius * sin(crankshaftPtr->angle) + crankshaftPtr->y;
+		
+		point_bPtr->x = crankshaftPtr->x;
+		point_bPtr->y = crankshaftPtr->y - calcEffectiveRodLength(200, crankshaftPtr->radius, crankshaftPtr->angle) + crankshaftPtr->radius * sin(crankshaftPtr->angle);
+		
+		preverror = (M_PI - crankshaftPtr->angle);
+
+
+		BeginDrawing();
+
+		// draw stuff
+		ClearBackground(SKYBLUE);
+		DrawText(TextFormat("dt: %02.09f ms", dt), 10, 10, 10, BLACK);
+		DrawText(TextFormat("theta: %02.09f ms", crankshaftPtr->angle), 10, 30, 20, GRAY);
+		DrawText(TextFormat("dist: %02.09f", sqrt(pow(point_aPtr->x - point_bPtr->x,2) + pow(point_aPtr->y - point_bPtr->y,2))), 10, 50, 20, GRAY);
+
+		// draw crankshaft
+		drawShaft(&crankshaft);
+
+		// draw points
+		drawPoint(point_aPtr);
+		drawPoint(point_bPtr);
+		DrawLine(point_aPtr->x, point_aPtr->y, point_bPtr->x, point_bPtr->y, BLACK);
+		EndDrawing();	
+	}
+	
+
+	CloseWindow();
+
+
+	return 0;
+}
