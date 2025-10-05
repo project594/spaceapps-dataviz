@@ -10712,9 +10712,10 @@ async function createWasm() {
     };
 
 
-  var requestFullscreen = Browser.requestFullscreen;
-
   var setCanvasSize = Browser.setCanvasSize;
+
+
+  var requestFullscreen = Browser.requestFullscreen;
 
   FS.createPreloadedFile = FS_createPreloadedFile;
   FS.preloadFile = FS_preloadFile;
@@ -10780,6 +10781,8 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
   Module['cwrap'] = cwrap;
   Module['UTF8ToString'] = UTF8ToString;
   Module['requestFullscreen'] = requestFullscreen;
+  Module['setCanvasSize'] = setCanvasSize;
+  Module['FS'] = FS;
   var missingLibrarySymbols = [
   'writeI53ToI64Clamped',
   'writeI53ToI64Signaling',
@@ -11028,7 +11031,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'FS_createPath',
   'FS_createDevice',
   'FS_readFile',
-  'FS',
   'FS_root',
   'FS_mounts',
   'FS_devices',
@@ -11192,7 +11194,6 @@ unexportedSymbols.forEach(unexportedRuntimeSymbol);
 
   // End runtime exports
   // Begin JS library exports
-  Module['setCanvasSize'] = setCanvasSize;
   // End JS library exports
 
 // end include: postlibrary.js
