@@ -57,6 +57,8 @@ double gaussian_odd(double x, double A, double mu, double sigma){
 }
 
 
+
+
 double gaussian(double x, double A, double mu, double sigma){
 	double v = A * exp(-((x-mu)*(x-mu)) / (2 * sigma * sigma));
 	return v;
@@ -76,6 +78,35 @@ static inline unsigned char clamp255(float v) {
     if (v > 255.0f) return 255;
     return (unsigned char)v;
 }
+
+
+Color rgb_from_hue(float hue) {
+    int s = 128.0;
+    int v = 128.0;
+
+    float c = v * s; // chroma
+    float x = c * (1 - fabsf(fmodf(hue / 60.0f, 2) - 1));
+    float m = v - c;
+
+    float r1, g1, b1;
+
+    if (hue < 60)
+        r1 = c, g1 = x, b1 = 0;
+    else if (hue < 120)
+        r1 = x, g1 = c, b1 = 0;
+    else if (hue < 180)
+        r1 = 0, g1 = c, b1 = x;
+    else if (hue < 240)
+        r1 = 0, g1 = x, b1 = c;
+   else if (hue < 300)
+        r1 = x, g1 = 0, b1 = c;
+    else
+        r1 = c, g1 = 0, b1 = x;
+
+    Color color = { (r1 + m), (g1 + m), (b1 + m), 255.0 };
+    return color;
+}
+
 
 Color blackBodyColor(double temp){
     float x = (float)(temp / 1000.0);
@@ -104,15 +135,6 @@ Color blackBodyColor(double temp){
 }
 
 
-static double g_koi_score = 0.0;
-static double g_koi_temp = 0.0;
-
-
-void set_candidate_params(float koi_score, float koi_temp) {
-    // Guárdalos en variables globales o actualiza tu escena
-    g_koi_score = koi_score;
-    g_koi_temp  = koi_temp;
-}
 
 void drawStar (star* s){
     DrawSphere((Vector3){0.0f, 0.0f, 0.0f}, (float)s->radius, blackBodyColor(s->temp));
@@ -192,8 +214,6 @@ void UpdateDrawFrame(void)
 	//DrawLine(0,0,500,500,RED);
         graphCurve(&g_planet, &g_graph);
         DrawFPS(10, 10);
-	DrawText(TextFormat("score: %02.09f ", g_koi_score), 10, 70, 20, GRAY);
-
     EndDrawing();
 }
    
