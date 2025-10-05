@@ -108,6 +108,32 @@ static double g_koi_score = 0.0;
 static double g_koi_temp = 0.0;
 
 
+int load_curve_from_path(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        printf("Could not open CSV: %s\n", path);
+        return 0; // false
+    }
+
+    printf("Reading CSV file from %s\n", path);
+    char line[512];
+    int lineCount = 0;
+
+    while (fgets(line, sizeof(line), f)) {
+        // aquí puedes parsear los valores
+        // ejemplo: lee las columnas koi_score y koi_temp
+        double koi_score = 0.0, koi_temp = 0.0;
+        sscanf(line, "%lf,%lf", &koi_score, &koi_temp);
+
+        printf("Row %d → score: %.3f | temp: %.3f\n", lineCount, koi_score, koi_temp);
+        lineCount++;
+    }
+
+    fclose(f);
+    return 1; // true
+}
+
+
 void set_candidate_params(float koi_score, float koi_temp) {
     // Guárdalos en variables globales o actualiza tu escena
     g_koi_score = koi_score;
