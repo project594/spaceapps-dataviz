@@ -96,12 +96,12 @@ void drawOrbit (planet* p){
 
 void graphCurve(planet* p, graph* g){
     (void)p; // no usado por ahora
-    DrawRectangle(g->xpos, g->ypos, g->size, 200, BLACK);
+    DrawRectangle(g->xpos, g->ypos, g->size, 100, BLACK);
     DrawRectangleLines(g->xpos, g->ypos, g->size, 200, GRAY);
     for (int i = 0; i < g->size; i++) {
-        double t = i * 0.01 - 2.0;
+        double t = i * 0.02 - 2.0;
         double a = periodic_dip(t, 1.0, 0.0, 0.3, -1.0, 1.0, 4.0);
-        DrawPixel(i + g->xpos, (int)(94*a) + g->ypos, RED);
+        DrawPixel(i + g->xpos, (int)(48*a) + g->ypos, RED);
     }
 }
 
@@ -152,27 +152,13 @@ void UpdateDrawFrame(void)
 
 int main(void)
 {   
-    SetTraceLogLevel(LOG_ALL); 
-
-    FILE *fp;
-    char row[1000];
-
-    fp = fopen("dummy.csv","r");
-
-
-    while (feof(fp) != true)
-    {
-        fgets(row, 1000, fp);
-        printf("Row: %s", row);
-    }
-   
-   
+    SetTraceLogLevel(LOG_ALL);    
     	
     const int screenWidth  = 1920;
     const int screenHeight = 1080;
 
     #if defined(PLATFORM_WEB)
-        InitWindow(800, 450, "raylib web");
+        InitWindow(1200, 800, "raylib web");
     #else
         InitWindow(screenWidth, screenHeight, "raylib [models] example - geometric shapes");
     #endif
@@ -203,9 +189,9 @@ int main(void)
     g_planet.radius       = 0.25;
     g_planet.orbitRadius  = 5.0;
 
-    g_graph.size = (int)(200 * M_PI);
+    g_graph.size = (int)(150 * M_PI);
     g_graph.xpos = 0;
-    g_graph.ypos = GetScreenHeight() - 200;
+    g_graph.ypos = GetScreenHeight() - 100;
 
     #if defined(PLATFORM_WEB)
         emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
