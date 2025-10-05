@@ -10714,6 +10714,8 @@ async function createWasm() {
 
   var requestFullscreen = Browser.requestFullscreen;
 
+  var setCanvasSize = Browser.setCanvasSize;
+
   FS.createPreloadedFile = FS_createPreloadedFile;
   FS.preloadFile = FS_preloadFile;
   FS.staticInit();;
@@ -11006,7 +11008,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'exceptionCaught',
   'Browser',
   'requestFullScreen',
-  'setCanvasSize',
   'getUserMedia',
   'createContext',
   'getPreloadedImageData__data',
@@ -11191,6 +11192,7 @@ unexportedSymbols.forEach(unexportedRuntimeSymbol);
 
   // End runtime exports
   // Begin JS library exports
+  Module['setCanvasSize'] = setCanvasSize;
   // End JS library exports
 
 // end include: postlibrary.js
