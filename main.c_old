@@ -2,20 +2,23 @@
 #include <stdlib.h>
 #include <math.h>
 #include "raylib.h"
-//#include <GLFW/glfw3.h>
 
-//#if defined(PLATFORM_DESKTOP)
-//    #define GLSL_VERSION 330
-//#else   // PLATFORM_ANDROID, PLATFORM_WEB
-//    #define GLSL_VERSION 100
-//#endif
+#if defined(PLATFORM_DESKTOP)
+    #define GLSL_VERSION 330
+#else   // PLATFORM_ANDROID, PLATFORM_WEB
+    #define GLSL_VERSION 100
+#endif
 
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
 #endif
 
+#define MAX_POSTPRO_SHADERS 12
 const double toDegrees = 180.0 / M_PI;
 
+// ============================
+// Tipos
+// ============================
 typedef struct graph {
     int size;
     int xpos;
@@ -41,6 +44,9 @@ typedef struct planet {
     double transitSignalToNoise;
 } planet;
 
+// ============================
+// Funciones de lógica
+// ============================
 double periodic_dip(double t, double period_factor, double center, double width, double depth, double baseline, double sharpness) {
     double P = period_factor * M_PI;
     double delta = fmod(t - center + 0.5 * P, P) - 0.5 * P;
@@ -113,6 +119,9 @@ void updateOrbitPoint(planet* p){
     p->z = r * sin(theta) * sin(inc);
 }
 
+// ============================
+// Estado global para WEB
+// ============================
 static double g_timeT = 0.0;
 static Camera g_camera = {0};
 static star g_star = {0};
@@ -120,6 +129,9 @@ static planet g_planet = {0};
 static graph g_graph = {0};
 static RenderTexture2D g_target; // por si quisieras usarlo en el futuro
 
+// ============================
+// Dibujo por frame (compatible WEB)
+// ============================
 void UpdateDrawFrame(void)
 {
     g_timeT += GetFrameTime();
@@ -147,17 +159,18 @@ void UpdateDrawFrame(void)
         DrawFPS(10, 10);
     EndDrawing();
 }
-   
 
 int main(void)
-{   
-    SetTraceLogLevel(LOG_ALL); 
-    	
-    const int screenWidth  = 1920;
-    const int screenHeight = 1080;
+{
+    // Antialias puede no estar disponible en todos los navegadores, pero no estorba.
+//    SetConfigFlags(FLAG_MSAA_4X_HINT);
+
+    // En web, el canvas manda; 0x0 deja que Emscripten ajuste al canvas CSS.
+    const int screenWidth  = 0x0;
+    const int screenHeight = 0x0;
 
     #if defined(PLATFORM_WEB)
-        InitWindow(800, 450, "raylib web");
+        InitWindow(0, 0, "raylib web - exoplanet orbit");
     #else
         InitWindow(screenWidth, screenHeight, "raylib [models] example - geometric shapes");
     #endif

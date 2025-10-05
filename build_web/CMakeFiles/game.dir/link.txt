@@ -1,1 +1,0 @@
-/home/prog/emsdk/upstream/emscripten/emcc -sASYNCIFY -sALLOW_MEMORY_GROWTH=1 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sWASM=1 -sUSE_GLFW=0 @CMakeFiles/game.dir/objects1.rsp -o index.html @CMakeFiles/game.dir/linkLibs.rsp

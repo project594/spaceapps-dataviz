@@ -1,3 +1,0 @@
-/home/cyn/dev/spaceapps-dataviz/build_web/CMakeFiles/game.dir
-/home/cyn/dev/spaceapps-dataviz/build_web/CMakeFiles/edit_cache.dir
-/home/cyn/dev/spaceapps-dataviz/build_web/CMakeFiles/rebuild_cache.dir
