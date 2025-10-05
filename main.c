@@ -96,12 +96,12 @@ void drawOrbit (planet* p){
 
 void graphCurve(planet* p, graph* g){
     (void)p; // no usado por ahora
-    DrawRectangle(g->xpos, g->ypos, g->size, 100, BLACK);
-    DrawRectangleLines(g->xpos, g->ypos, g->size, 200, GRAY);
+    DrawRectangle(g->xpos, g->ypos, g->size, 150, BLACK);
+    DrawRectangleLines(g->xpos, g->ypos, g->size, 300, GRAY);
     for (int i = 0; i < g->size; i++) {
         double t = i * 0.02 - 2.0;
         double a = periodic_dip(t, 1.0, 0.0, 0.3, -1.0, 1.0, 4.0);
-        DrawPixel(i + g->xpos, (int)(48*a) + g->ypos, RED);
+        DrawPixel(i + g->xpos, (int)(72*a) + g->ypos, RED);
     }
 }
 
@@ -158,7 +158,7 @@ int main(void)
     const int screenHeight = 1080;
 
     #if defined(PLATFORM_WEB)
-        InitWindow(1200, 800, "raylib web");
+        InitWindow(1800, 900, "raylib web");
     #else
         InitWindow(screenWidth, screenHeight, "raylib [models] example - geometric shapes");
     #endif
@@ -191,7 +191,7 @@ int main(void)
 
     g_graph.size = (int)(150 * M_PI);
     g_graph.xpos = 0;
-    g_graph.ypos = GetScreenHeight() - 100;
+    g_graph.ypos = GetScreenHeight() - 150;
 
     #if defined(PLATFORM_WEB)
         emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
