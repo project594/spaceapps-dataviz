@@ -498,6 +498,11 @@ TTY.init();
   // End ATPOSTCTORS hooks
 }
 
+function preMain() {
+  checkStackCookie();
+  // No ATMAINS hooks
+}
+
 function postRun() {
   checkStackCookie();
    // PThreads reuse the runtime from the main thread.
@@ -10317,6 +10322,8 @@ async function createWasm() {
       GLFW.hints[target] = hint;
     };
 
+
+
   var runAndAbortIfError = (func) => {
       try {
         return func();
@@ -11241,7 +11248,7 @@ function GetCanvasIdJs() { var canvasId = "#" + Module.canvas.id; var lengthByte
 // Imports from the Wasm binary.
 var _load_curve_from_path = Module['_load_curve_from_path'] = makeInvalidEarlyAccess('_load_curve_from_path');
 var _set_candidate_params = Module['_set_candidate_params'] = makeInvalidEarlyAccess('_set_candidate_params');
-var _main = makeInvalidEarlyAccess('_main');
+var _main = Module['_main'] = makeInvalidEarlyAccess('_main');
 var _free = makeInvalidEarlyAccess('_free');
 var _malloc = makeInvalidEarlyAccess('_malloc');
 var _fflush = makeInvalidEarlyAccess('_fflush');
@@ -11292,7 +11299,7 @@ var _asyncify_stop_rewind = makeInvalidEarlyAccess('_asyncify_stop_rewind');
 function assignWasmExports(wasmExports) {
   Module['_load_curve_from_path'] = _load_curve_from_path = createExportWrapper('load_curve_from_path', 1);
   Module['_set_candidate_params'] = _set_candidate_params = createExportWrapper('set_candidate_params', 2);
-  _main = createExportWrapper('main', 2);
+  Module['_main'] = _main = createExportWrapper('main', 2);
   _free = createExportWrapper('free', 1);
   _malloc = createExportWrapper('malloc', 1);
   _fflush = createExportWrapper('fflush', 1);
@@ -12149,6 +12156,27 @@ var wasmImports = {
 
 var calledRun;
 
+function callMain() {
+  assert(runDependencies == 0, 'cannot call main when async dependencies remain! (listen on Module["onRuntimeInitialized"])');
+  assert(typeof onPreRuns === 'undefined' || onPreRuns.length == 0, 'cannot call main when preRun functions remain to be called');
+
+  var entryFunction = _main;
+
+  var argc = 0;
+  var argv = 0;
+
+  try {
+
+    var ret = entryFunction(argc, argv);
+
+    // if we're not running an evented main loop, it's time to exit
+    exitJS(ret, /* implicit = */ true);
+    return ret;
+  } catch (e) {
+    return handleException(e);
+  }
+}
+
 function stackCheckInit() {
   // This is normally called automatically during __wasm_call_ctors but need to
   // get these values before even running any of the ctors so we call it redundantly
@@ -12186,10 +12214,13 @@ function run() {
 
     initRuntime();
 
+    preMain();
+
     Module['onRuntimeInitialized']?.();
     consumedModuleProp('onRuntimeInitialized');
 
-    assert(!Module['_main'], 'compiled without a main, but one is present. if you added it from JS, use Module["onRuntimeInitialized"]');
+    var noInitialRun = Module['noInitialRun'] || false;
+    if (!noInitialRun) callMain();
 
     postRun();
   }
