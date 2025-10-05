@@ -1,320 +1,219 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <raylib.h>
 #include <math.h>
+#include "raylib.h"
 
+#if defined(PLATFORM_DESKTOP)
+    #define GLSL_VERSION 330
+#else   // PLATFORM_ANDROID, PLATFORM_WEB
+    #define GLSL_VERSION 100
+#endif
+
+#if defined(PLATFORM_WEB)
+    #include <emscripten/emscripten.h>
+#endif
+
+#define MAX_POSTPRO_SHADERS 12
 const double toDegrees = 180.0 / M_PI;
-const int scale = 3000;
 
-typedef struct Point {
-	float x;
-	float y;
-} Point;
+// ============================
+// Tipos
+// ============================
+typedef struct graph {
+    int size;
+    int xpos;
+    int ypos;
+} graph;
 
-// physics definitions
-typedef struct phys_Shaft {
-	double x;
-	double y;
-	double angle;
-	double radius;
-	double inertia;
-	double omega;
-	double accel;
-	double torque;
-	double Mu;
-} phys_Shaft;
+typedef struct star {
+    double temp;
+    double radius;
+} star;
 
-typedef struct cylinder {
-	double bore;
-	double stroke;
-	double pressure;
-	double apressure;
-} cylinder;
+typedef struct planet {
+    double period;
+    double theta;
+    double inclination;
+    double temp;
+    double x;
+    double y;
+    double z;
+    double radius;
+    double orbitRadius;
+    double transitDuration;
+    double transitSignalToNoise;
+} planet;
 
-typedef struct head {
-	double intakePressure; 
-	double headVolume;
-	double exhaustDisplacement;
-	double intakeDisplacement;
-	double intakeVRadius;
-	double intakeSRadius;
-	double exhaustVRadius;
-	double exhaustSRadius;
-} head;
-
-typedef struct piston {
-	double rodLength;
-        double position; // position relative to tdc
-        double velocity;
-        double area;
-        double inForce;
-        double outForce;
-	double nForce;
-} piston;
-
-
-
-void Initialize(){
-	SetTargetFPS(2500);
+// ============================
+// Funciones de lógica
+// ============================
+double periodic_dip(double t, double period_factor, double center, double width, double depth, double baseline, double sharpness) {
+    double P = period_factor * M_PI;
+    double delta = fmod(t - center + 0.5 * P, P) - 0.5 * P;
+    if (delta < -0.5 * P) delta += P;
+    else if (delta > 0.5 * P) delta -= P;
+    return baseline - depth * exp(-pow(fabs(delta / width), sharpness));
 }
 
-
-
-// 	double functions
-
-double ForceFromP(cylinder* cyl) {
-	double r = cyl->bore / 2;
-	double f = cyl->pressure * (M_PI * (r * r));	
-	return f;
+static inline unsigned char clamp255(float v) {
+    if (v < 0.0f) return 0;
+    if (v > 255.0f) return 255;
+    return (unsigned char)v;
 }
 
-double EffectiveRodLength(double length, double radius, double theta){
-	double rcos = radius * cos(theta);
-	return sqrt(length * length - (rcos * rcos));
+Color blackBodyColor(double temp){
+    float x = (float)(temp / 1000.0);
+    float x2 = x * x;
+    float x3 = x2 * x;
+    float x4 = x3 * x;
+    float x5 = x4 * x;
+
+    float Rf, Gf, Bf;
+
+    // red
+    if (temp <= 6600) Rf = 1.0f;
+    else Rf = 0.0002889f * x5 - 0.01258f * x4 + 0.2148f * x3 - 1.776f * x2 + 6.907f * x - 8.723f;
+
+    // green
+    if (temp <= 6600) Gf = -4.593e-05f * x5 + 0.001424f * x4 - 0.01489f * x3 + 0.0498f * x2 + 0.1669f * x - 0.1653f;
+    else Gf = -1.308e-07f * x5 + 1.745e-05f * x4 - 0.0009116f * x3 + 0.02348f * x2 - 0.3048f * x + 2.159f;
+
+    // blue
+    if (temp <= 2000.0) Bf = 0.0f;
+    else if (temp < 6600.0) Bf = 0.00001764f * x5 + 0.0003575f * x4 - 0.01554f * x3 + 0.1549f * x2 - 0.3682f * x + 0.2386f;
+    else Bf = 1.0f;
+
+    Color c = { clamp255(Rf*255.0f), clamp255(Gf*255.0f), clamp255(Bf*255.0f), 255 };
+    return c;
 }
 
-
-
-double FrustumLSA(double R, double r, double h){
-	double LSA = M_PI * (R + r) * sqrt((R-r) * (R-r) + h * h);
-	return LSA;	
-
+void drawStar (star* s){
+    DrawSphere((Vector3){0.0f, 0.0f, 0.0f}, (float)s->radius, blackBodyColor(s->temp));
 }
 
-double TcsFromFp(double fp, double theta, double L, double R){
-	double n = L/R;
-	double Tcs = fp * R * (cos(theta) + (sin(2 * theta))/(2 * sqrt(n * n - sin(theta) * sin(theta))));
-	return Tcs;
+void drawPlanet (planet* p){
+    DrawSphere((Vector3){(float)p->x, (float)p->y, (float)p->z}, (float)p->radius, blackBodyColor(p->temp));
 }
 
-
-
-//	void functions
-
-void updPiston(phys_Shaft* crankshaft, cylinder* cylinder, piston* piston, head* head){
-
-	//	this function updates the pistons properties.
-
-	double angle = crankshaft->angle;
-	double length = piston->rodLength;
-	double cradius = crankshaft->radius;
-	double omega = crankshaft->omega;
-	double n = length / cradius;
-	double sa = sin(angle + M_PI / 2);
-	
-	piston->area = (cylinder->bore / 2) * (cylinder->bore / 2) * M_PI;	
-
-	piston->position = 
-//	EffectiveRodLength(length, cradius, angle + M_PI / 2) + cradius * sa;
-	cradius * cos(angle + M_PI / 2) + sqrt(length * length - cradius * cradius * sa * sa);
-	
-	piston->velocity = 
-	-omega * cradius * (sa + (sin(2 * angle + M_PI / 2) / (2 * sqrt(n * n - sa * sa))));
-
-	piston->inForce = cylinder->pressure * piston->area;
-	piston->outForce = cylinder->apressure * piston->area;
-	piston->nForce = piston->inForce - piston->outForce;
+void drawOrbit (planet* p){
+    DrawCircle3D((Vector3){0.0f,0.0f,0.0f}, (float)p->orbitRadius, (Vector3){1,0,0}, (float)(p->inclination * toDegrees + 90.0), WHITE);
 }
 
-
-void updCylinder(cylinder* cylinder, piston* piston, head* head){
-	
-	// 	this function updates the cylinders properties.
-
-	double vp = piston->velocity;
-	double ap = piston->area;
-	double vi = piston->area * cylinder->stroke / 2; //+ head->headVolume;			// temp		// initial volume, volume from when av reached 0
-	double vc = piston->area * (cylinder->stroke + piston->rodLength - piston->position); //+ head->headVolume; 	// current volume
-	double av = FrustumLSA(head->exhaustVRadius, head->exhaustSRadius, head->exhaustDisplacement);	// the lsa of a frustum through which gas flows
-	double pa = cylinder->apressure;
-	double pc = 0.0;
-	double rho = 1.225; // density of air in kg/m3
-
-	if (av > 0.0001){ // left off here
-		double vaa = vp * ap / av;
-		pc = 0.5 * rho * (vaa * vaa - vp * vp) + pa;		// use bernoulli principle when valve is open
-	} else {
-		pc = vi * pa / vc;
-		//pc = 0.0;				// when closed, just get the proportional pressure	
-	}
-	cylinder->pressure = pc;
+void graphCurve(planet* p, graph* g){
+    (void)p; // no usado por ahora
+    DrawRectangle(g->xpos, g->ypos, g->size, 200, BLACK);
+    DrawRectangleLines(g->xpos, g->ypos, g->size, 200, GRAY);
+    for (int i = 0; i < g->size; i++) {
+        double t = i * 0.01 - 2.0;
+        double a = periodic_dip(t, 1.0, 0.0, 0.3, -1.0, 1.0, 4.0);
+        DrawPixel(i + g->xpos, (int)(94*a) + g->ypos, RED);
+    }
 }
 
-
-void updShaft(phys_Shaft* shaft,piston* piston, double extraTorque, double dt){
-
-	//	this function updates the crankshafts properties.	
-
-	shaft->torque = TcsFromFp(piston->nForce, shaft->angle, piston->rodLength, shaft->radius) + extraTorque;
-	shaft->accel = shaft->torque / shaft->inertia;
-	shaft->omega += shaft->accel * dt;
-	shaft->omega -= shaft->omega * 10.0 * dt;
-	shaft->angle += shaft->omega * dt;
-	if (isnan(shaft->omega)){
-		shaft->omega = 0;
-	}
-	if (isnan(shaft->angle)){
-		shaft->angle = 0;
-	}
+void updateOrbitPoint(planet* p){
+    double r = p->orbitRadius;
+    double theta = p->theta;
+    double inc = p->inclination + M_PI/2.0;
+    p->x = r * cos(theta);
+    p->y = r * sin(theta) * cos(inc);
+    p->z = r * sin(theta) * sin(inc);
 }
 
+// ============================
+// Estado global para WEB
+// ============================
+static double g_timeT = 0.0;
+static Camera g_camera = {0};
+static star g_star = {0};
+static planet g_planet = {0};
+static graph g_graph = {0};
+static RenderTexture2D g_target; // por si quisieras usarlo en el futuro
 
+// ============================
+// Dibujo por frame (compatible WEB)
+// ============================
+void UpdateDrawFrame(void)
+{
+    g_timeT += GetFrameTime();
 
-// misc functions
+    updateOrbitPoint(&g_planet);
+    g_planet.theta = g_timeT;
+    g_planet.inclination = 0.3;
 
-void drawShaft(phys_Shaft* shaft){
-	const Vector2 center = { shaft->x, shaft->y };
-	DrawCircle(shaft->x, shaft->y, shaft->radius * scale, RAYWHITE);
-	DrawCircleSector(
-			center, 
-			shaft->radius * scale, 
-			shaft->angle * toDegrees + 10, 
-			shaft->angle * toDegrees - 10, 
-			3, 
-			GRAY
-		);
+    g_camera.position = (Vector3){
+        14.0f * (float)sin(g_timeT / 16.0),
+         4.0f + 0.1f * (float)cos(g_timeT / 20.0),
+        12.0f * (float)cos(g_timeT / 16.0)
+    };
+
+    BeginDrawing();
+        ClearBackground(BLACK);
+        BeginMode3D(g_camera);
+            drawStar(&g_star);
+            drawOrbit(&g_planet);
+            drawPlanet(&g_planet);
+            DrawGrid(8, 2.0f);
+        EndMode3D();
+
+        graphCurve(&g_planet, &g_graph);
+        DrawFPS(10, 10);
+    EndDrawing();
 }
 
+int main(void)
+{
+    // Antialias puede no estar disponible en todos los navegadores, pero no estorba.
+//    SetConfigFlags(FLAG_MSAA_4X_HINT);
 
-void drawPoint(Point* point){
-	DrawCircle(point->x, point->y, 5, BLACK);
-}
+    // En web, el canvas manda; 0x0 deja que Emscripten ajuste al canvas CSS.
+    const int screenWidth  = 0x0;
+    const int screenHeight = 0x0;
 
+    #if defined(PLATFORM_WEB)
+        InitWindow(0, 0, "raylib web - exoplanet orbit");
+    #else
+        InitWindow(screenWidth, screenHeight, "raylib [models] example - geometric shapes");
+    #endif
 
-int inputx = 0;
-int inputy = 0;
-void control(){
+    // Si quieres bloquear 60 FPS en desktop
+    #if !defined(PLATFORM_WEB)
+        SetTargetFPS(60);
+    #endif
 
-	if (IsKeyDown(KEY_D)){
-		inputx = 1;
-	}
-	else if (IsKeyDown(KEY_A)){
-		inputx = -1;
-	} else {
-		inputx = 0;
-	}
-	if (IsKeyDown(KEY_W)){
-		inputy = 1;
-	}
-	else if (IsKeyDown(KEY_S)){
-		inputy = -1;
-	}
-	else {
-		inputy = 0;
-	}
-}
+    g_target = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
+    g_camera.position = (Vector3){ 0.0f, 10.0f, 10.0f };
+    g_camera.target   = (Vector3){ 0.0f, -1.0f, 0.0f };
+    g_camera.up       = (Vector3){ 0.0f, 1.0f, 0.0f };
+    g_camera.fovy     = 45.0f;
+    g_camera.projection = CAMERA_PERSPECTIVE;
 
+    g_star.temp   = 4000.0;
+    g_star.radius = 0.75;
 
-int main(){
-	const int width = 1200;
-	const int height = 800;
-	
-	
-	phys_Shaft crankshaft = (phys_Shaft){
-		.x = 		600,
-		.y = 		600,
+    g_planet.period       = 10.0;
+    g_planet.theta        = 0.0;
+    g_planet.inclination  = 0.0;
+    g_planet.temp         = 1000.0;
+    g_planet.x            = 3.0;
+    g_planet.y            = 3.0;
+    g_planet.z            = 0.0;
+    g_planet.radius       = 0.25;
+    g_planet.orbitRadius  = 5.0;
 
-		.angle = 	0.0,
-		.radius = 	0.045,
-		.inertia = 	0.09,
-		.omega = 	0.0,
-		.accel = 	0.0,
-		.Mu = 		0.01,
-		.torque = 	0.0,
-	};
-	phys_Shaft *crankshaftPtr = &crankshaft;
+    g_graph.size = (int)(200 * M_PI);
+    g_graph.xpos = 0;
+    g_graph.ypos = GetScreenHeight() - 200;
 
-	cylinder cyl_1 = (cylinder){
-		.bore = 	0.084,		// diameter
-		.stroke = 	0.09,		// stroke must be 2 * crankshaft radius
-		.pressure = 	3000000.0,
-		.apressure =	101325.0,
-	};
-	cylinder *cyl_1Ptr = &cyl_1;
-	
-	head head_1 = (head){
-		.intakePressure = 	101325.0, 	// 1 atm = 101325 Pa
-		.headVolume = 		0.00084, 	// temp, in m^3
-		.exhaustDisplacement = 	0.01,  		// valve opening in m
-		.intakeDisplacement = 	0.0,
-		.intakeVRadius = 	0.0165,		// valve radius
-		.intakeSRadius = 	0.015,		// seat radius
-		.exhaustVRadius = 	0.0145,
-		.exhaustSRadius = 	0.0135,		
-	};
-	head *head_1Ptr = &head_1;
+    #if defined(PLATFORM_WEB)
+        emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
+    #else
+        while (!WindowShouldClose()) {
+            UpdateDrawFrame();
+        }
+        UnloadRenderTexture(g_target);
+        CloseWindow();
+    #endif
 
-        piston piston_1 = (piston){
-		.rodLength = 	0.14435, // must be longer than stroke
-                .position = 	0.0,
-                .velocity = 	0.0,
-                .area = 	0.0,	// will be updated with cylinder info
-                .inForce = 	0.0,
-                .outForce = 	0.0,
-        };
-	piston *piston_1Ptr = &piston_1;	
-
-
-	Point point_a = (Point){
-		.x = 0,
-		.y = 0,
-	};
-	Point *point_aPtr = &point_a;
-
-	Point point_b = (Point){
-		.x = 0,
-		.y = 0,
-	};
-	Point *point_bPtr = &point_b;
-
-
-	InitWindow(width, height, "great");	
-	Initialize();
-	
-    	SetConfigFlags(FLAG_MSAA_4X_HINT);      // Enable Multi Sampling Anti Aliasing 4x (if available)
-
-	while(!WindowShouldClose()) {
-		double dt = GetFrameTime();
-		control();
-		
-		head_1Ptr->exhaustDisplacement = 0.01 * inputy;
-		updPiston(crankshaftPtr, cyl_1Ptr, piston_1Ptr, head_1Ptr);
-		updCylinder(cyl_1Ptr, piston_1Ptr, head_1Ptr);
-		updShaft(crankshaftPtr, piston_1Ptr, 100.0 * inputx, dt);
-		
-
-		point_aPtr->x = crankshaftPtr->radius * scale * cos(crankshaftPtr->angle) + crankshaftPtr->x;
-		point_aPtr->y = crankshaftPtr->radius * scale * sin(crankshaftPtr->angle) + crankshaftPtr->y;
-		
-		point_bPtr->x = crankshaftPtr->x;
-//		point_bPtr->y = crankshaftPtr->y - EffectiveRodLength(piston_1Ptr->rodLength * scale, crankshaftPtr->radius * scale, crankshaftPtr->angle) + crankshaftPtr->radius * scale * sin(crankshaftPtr->angle);
-		point_bPtr->y = crankshaftPtr->y -  piston_1Ptr->position * scale;
-		
-
-
-		BeginDrawing();
-
-		// draw stuff
-		ClearBackground(SKYBLUE);
-		DrawText(TextFormat("dt: %02.09f ms", dt), 10, 10, 10, BLACK);
-//		DrawText(TextFormat("theta: %02.09f ms", (crankshaftPtr->omega * 0.159155 * 60)), 10, 30, 20, GRAY);
-		DrawText(TextFormat("pressure: %02.09f ms", (cyl_1Ptr->pressure - cyl_1Ptr->apressure)), 10, 30, 20, GRAY);
-		DrawText(TextFormat("rpm: %02.09f ", crankshaftPtr->omega * 9.5493), 10, 70, 20, GRAY);
-DrawText(TextFormat("dist: %02.09f", sqrt(pow(point_aPtr->x - point_bPtr->x,2) + pow(point_aPtr->y - point_bPtr->y,2))), 10, 50, 20, GRAY);
-		// draw crankshaft
-		drawShaft(&crankshaft);
-
-		// draw points
-		drawPoint(point_aPtr);
-		drawPoint(point_bPtr);
-		DrawLine(point_aPtr->x, point_aPtr->y, point_bPtr->x, point_bPtr->y, BLACK);
-		EndDrawing();
-	}
-	
-
-	CloseWindow();
-
-
-	return 0; 
+    return 0;
 }
