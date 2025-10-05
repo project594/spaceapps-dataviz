@@ -10712,6 +10712,7 @@ async function createWasm() {
     };
 
 
+
   var setCanvasSize = Browser.setCanvasSize;
 
 
@@ -10778,6 +10779,7 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
 }
 
 // Begin runtime exports
+  Module['ccall'] = ccall;
   Module['cwrap'] = cwrap;
   Module['UTF8ToString'] = UTF8ToString;
   Module['requestFullscreen'] = requestFullscreen;
@@ -10955,7 +10957,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'addOnPreRun',
   'addOnExit',
   'addOnPostRun',
-  'ccall',
   'freeTableIndexes',
   'functionsInTableMap',
   'setValue',
