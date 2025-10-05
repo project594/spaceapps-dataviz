@@ -55,6 +55,7 @@ static inline unsigned char clamp255(float v) {
     return (unsigned char)v;
 }
 
+
 Color blackBodyColor(double temp){
     float x = (float)(temp / 1000.0);
     float x2 = x * x;
@@ -152,6 +153,20 @@ void UpdateDrawFrame(void)
 int main(void)
 {   
     SetTraceLogLevel(LOG_ALL); 
+
+    FILE *fp;
+    char row[1000];
+
+    fp = fopen("dummy.csv","r");
+
+
+    while (feof(fp) != true)
+    {
+        fgets(row, 1000, fp);
+        printf("Row: %s", row);
+    }
+   
+   
     	
     const int screenWidth  = 1920;
     const int screenHeight = 1080;
